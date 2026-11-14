@@ -692,6 +692,23 @@ class _Draft {
   String get rowKey => 'm$turn.$step';
 
   List<ChatItem> items({required bool useRowKey}) {
+    // Fast path: a reply that is still streaming into a single text block is
+    // what the UI asks for every 32 ms. Copying it into an aggregate buffer
+    // and then calling toString copies the whole reply twice per publish.
+    if (blocks.length == 1) {
+      final only = blocks.values.first;
+      if (only.finished == null && only.type == 'text' && only.text.isNotEmpty) {
+        return [
+          AssistantChatItem(
+            id: 'd$attemptId',
+            rowKey: useRowKey ? rowKey : null,
+            text: only.text.toString(),
+            reasoning: '',
+            streaming: streaming,
+          ),
+        ];
+      }
+    }
     final text = StringBuffer();
     final reasoning = StringBuffer();
     final tools = <ChatItem>[];

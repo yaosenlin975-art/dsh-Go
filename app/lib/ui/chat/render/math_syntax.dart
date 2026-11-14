@@ -102,22 +102,26 @@ class _MathScanner {
         atLineStart = false;
         lineStart = i;
         final lineEnd = _lineEnd(i);
-        final line = text.substring(i, lineEnd);
         final open = fence;
         if (open != null) {
-          if (open.closedBy(line)) fence = null;
+          if (_mayBeFenceLine(i, lineEnd) &&
+              open.closedBy(text.substring(i, lineEnd))) {
+            fence = null;
+          }
           _copyLine(i, lineEnd);
           i = lineEnd < _n ? lineEnd + 1 : _n;
           atLineStart = true;
           continue;
         }
-        final opens = _Fence.open(line);
-        if (opens != null) {
-          fence = opens;
-          _copyLine(i, lineEnd);
-          i = lineEnd < _n ? lineEnd + 1 : _n;
-          atLineStart = true;
-          continue;
+        if (_mayBeFenceLine(i, lineEnd)) {
+          final opens = _Fence.open(text.substring(i, lineEnd));
+          if (opens != null) {
+            fence = opens;
+            _copyLine(i, lineEnd);
+            i = lineEnd < _n ? lineEnd + 1 : _n;
+            atLineStart = true;
+            continue;
+          }
         }
       }
       final c = text.codeUnitAt(i);
@@ -174,10 +178,45 @@ class _MathScanner {
           continue;
         }
       }
-      _out.writeCharCode(c);
-      i += 1;
+      // Copy the run of plain characters up to the next one the loop handles,
+      // in one piece: a writeCharCode per character on every publish is the
+      // bulk of this scan's cost.
+      final run = _nextSpecial(i + 1);
+      if (run == i + 1) {
+        _out.writeCharCode(c);
+      } else {
+        _out.write(text.substring(i, run));
+      }
+      i = run;
     }
     return _out.toString();
+  }
+
+  /// Index of the next character at or after [from] that the loop handles
+  /// specially, or [_n] when the rest of the text is plain.
+  int _nextSpecial(int from) {
+    var j = from;
+    while (j < _n) {
+      final c = text.codeUnitAt(j);
+      if (c == _newline || c == _backtick || c == _backslash || c == _dollar) {
+        return j;
+      }
+      j += 1;
+    }
+    return _n;
+  }
+
+  /// Whether the line spanning [from]..[to] can be a fence marker at all: only
+  /// lines whose first non-space, non-quote character is a backtick or tilde
+  /// can, so every other line is never materialized into a String.
+  bool _mayBeFenceLine(int from, int to) {
+    var j = from;
+    while (j < to && _isPrefixChar(text.codeUnitAt(j))) {
+      j += 1;
+    }
+    if (j >= to) return false;
+    final c = text.codeUnitAt(j);
+    return c == _backtick || c == 0x7E /* ~ */;
   }
 
   int _lineEnd(int from) {
