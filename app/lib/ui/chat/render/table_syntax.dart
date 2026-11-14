@@ -40,7 +40,13 @@ final _fenceClose = RegExp(r'^[ \t]*(?:>[ \t]?)*[ \t]*(`{3,}|~{3,})[ \t]*$');
 final _delimiterCell = RegExp(r'^\s*:?-+:?\s*$');
 final _pipe = RegExp(r'(?<!\\)\|');
 
-String _unquoted(String line) => line.trim().replaceFirst(RegExp(r'^(?:>[ \t]?)*'), '').trim();
+// Compiled once: these run per line of every streamed reply, and a fresh
+// RegExp per call re-parses the pattern on every publish.
+final _quotes = RegExp(r'^(?:>[ \t]?)*');
+final _linePrefix = RegExp(r'^[ \t]*(?:>[ \t]?)*');
+final _quotePrefixLine = RegExp(r'^[ \t]*(?:>[ \t]?)+');
+
+String _unquoted(String line) => line.trim().replaceFirst(_quotes, '').trim();
 
 /// A GFM delimiter row with as many cells as the header (`a | b` over `---`
 /// is a heading, not a table).
@@ -117,7 +123,7 @@ bool _needsBreakAbove(String? previous, String line) {
 /// The `>` markers a blank line inside the same quote carries: `>` for
 /// `> | a |`, so the table stays in the quote.
 String _quotePrefix(String line) =>
-    RegExp(r'^[ \t]*(?:>[ \t]?)+').firstMatch(line)?.group(0)?.trimRight() ?? '';
+    _quotePrefixLine.firstMatch(line)?.group(0)?.trimRight() ?? '';
 
 final _blockLine = RegExp(
   r'^(?:#{1,6}(?:[ \t]|$)'
@@ -129,7 +135,7 @@ final _blockLine = RegExp(
 /// The header row with each cell's text in `**…**`, keeping the row's quote
 /// prefix, its pipes and the spaces around each cell.
 String _boldRow(String line) {
-  final prefix = RegExp(r'^[ \t]*(?:>[ \t]?)*').firstMatch(line)!.group(0)!;
+  final prefix = _linePrefix.firstMatch(line)!.group(0)!;
   final body = line.substring(prefix.length);
   final parts = body.split(_pipe);
   for (var i = 0; i < parts.length; i++) {

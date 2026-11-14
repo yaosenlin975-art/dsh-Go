@@ -70,9 +70,17 @@ int inlineDollarCloser(String text, int open) {
 /// and nothing a formula would contain.
 bool _readsAsPrices(String body) {
   if (body.isEmpty || !_isDigit(body.codeUnitAt(0))) return false;
-  if (!body.contains(RegExp(r'\s'))) return false;
-  return !body.contains(RegExp(r'[\\^_{}=+<>]'));
+  if (!body.contains(_whitespace)) return false;
+  return !body.contains(_mathSymbol);
 }
+
+// Compiled once: these run for every `$…$` candidate and every fenced line on
+// every publish, so a fresh RegExp per call would re-parse the pattern
+// thousands of times a second while a reply streams.
+final _whitespace = RegExp(r'\s');
+final _mathSymbol = RegExp(r'[\\^_{}=+<>]');
+final _fenceRun = RegExp(r'^[ \t>]*(`+)', multiLine: true);
+final _fenceCloseLine = RegExp(r'^[ \t]*(?:>[ \t]?)*[ \t]*(`+|~+)[ \t]*$');
 
 class _MathScanner {
   _MathScanner(this.text, this.streaming);
@@ -261,7 +269,7 @@ class _MathScanner {
   /// A fence longer than any backtick run at the start of a line in [body].
   static int _fenceLength(String body) {
     var longest = 0;
-    for (final match in RegExp(r'^[ \t>]*(`+)', multiLine: true).allMatches(body)) {
+    for (final match in _fenceRun.allMatches(body)) {
       if (match.group(1)!.length > longest) longest = match.group(1)!.length;
     }
     return longest < 3 ? 3 : longest + 1;
@@ -290,7 +298,7 @@ class _Fence {
   }
 
   bool closedBy(String line) {
-    final match = RegExp(r'^[ \t]*(?:>[ \t]?)*[ \t]*(`+|~+)[ \t]*$').firstMatch(line);
+    final match = _fenceCloseLine.firstMatch(line);
     if (match == null) return false;
     final run = match.group(1)!;
     return run.codeUnitAt(0) == char && run.length >= length;

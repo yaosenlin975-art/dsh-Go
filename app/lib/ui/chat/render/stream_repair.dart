@@ -114,7 +114,7 @@ class _BlockScan {
       _fenceChar = fence.group(1)![0];
       _fenceLength = fence.group(1)!.length;
       _openFenceLine = offset;
-    } else if (line.trim().isEmpty || line.replaceAll(RegExp(r'[\s>]'), '').isEmpty) {
+    } else if (line.trim().isEmpty || line.replaceAll(_blankChars, '').isEmpty) {
       lastBlockStart = offset + line.length + 1;
     }
   }
@@ -126,17 +126,27 @@ class _BlockScan {
 final _tableRow = RegExp(r'^[ \t]*(?:>[ \t]?)*[ \t]*\|');
 final _delimiterCell = RegExp(r'^\s*:?-+:?\s*$');
 
+// Compiled once: the repair runs on every publish while a reply streams, so a
+// fresh RegExp per line (or per character, in [_isPunct]) re-parses needlessly.
+final _blankChars = RegExp(r'[\s>]');
+final _trailingNewlines = RegExp(r'\n+$');
+final _growingDelimiter = RegExp(r'^[ \t]*(?:>[ \t]?)*[ \t]*:?-');
+final _quotes = RegExp(r'^(?:>[ \t]?)*');
+final _pipeCell = RegExp(r'(?<!\\)\|');
+final _openTag = RegExp(r'<[A-Za-z/!][^<>\n]*$');
+final _asciiPunct = RegExp(r'[!-/:-@\[-`{-~]');
+
 /// Where a table at the end of the block starts when its delimiter row is
 /// not complete yet (-1 when there is none): its header row would otherwise
 /// show as a paragraph of pipes and then jump into a grid.
 int _unfinishedTableAt(String tail) {
-  final lines = tail.replaceFirst(RegExp(r'\n+$'), '').split('\n');
+  final lines = tail.replaceFirst(_trailingNewlines, '').split('\n');
   var first = lines.length;
   while (first > 0 && _tableRow.hasMatch(lines[first - 1])) {
     first -= 1;
   }
   // The delimiter row itself may be what is still arriving (`|---|--`).
-  if (first == lines.length && first > 0 && RegExp(r'^[ \t]*(?:>[ \t]?)*[ \t]*:?-').hasMatch(lines.last)) {
+  if (first == lines.length && first > 0 && _growingDelimiter.hasMatch(lines.last)) {
     first -= 1;
     while (first > 0 && _tableRow.hasMatch(lines[first - 1])) {
       first -= 1;
@@ -152,11 +162,11 @@ int _unfinishedTableAt(String tail) {
 }
 
 List<String> _cells(String row) {
-  var t = row.trim().replaceFirst(RegExp(r'^(?:>[ \t]?)*'), '').trim();
+  var t = row.trim().replaceFirst(_quotes, '').trim();
   if (t.startsWith('|')) t = t.substring(1);
   if (t.endsWith('|') && !t.endsWith(r'\|')) t = t.substring(0, t.length - 1);
   if (t.trim().isEmpty) return const [];
-  return t.split(RegExp(r'(?<!\\)\|'));
+  return t.split(_pipeCell);
 }
 
 /// Lines that are only the start of a construct: a heading or list marker
@@ -323,7 +333,7 @@ class _InlineScan {
     final code = openCode;
     if (code != null && code < at && text.substring(code + codeRun).trim().isEmpty) at = code;
     final scanned = code ?? openLinkTarget ?? at;
-    final tag = RegExp(r'<[A-Za-z/!][^<>\n]*$').firstMatch(text.substring(0, scanned < at ? scanned : at));
+    final tag = _openTag.firstMatch(text.substring(0, scanned < at ? scanned : at));
     if (tag != null && tag.start < at) at = tag.start;
     for (final opener in openers) {
       if (opener.at < at && text.substring(opener.at + opener.marker.length, at).trim().isEmpty) {
@@ -380,7 +390,7 @@ bool _isSpace(String c) => c == ' ' || c == '\t' || c == '\n' || c == '\r' || c 
 
 bool _isPunct(String c) {
   final unit = c.codeUnitAt(0);
-  if (unit < 0x80) return RegExp(r'[!-/:-@\[-`{-~]').hasMatch(c);
+  if (unit < 0x80) return _asciiPunct.hasMatch(c);
   // CJK and full-width punctuation count, so `**「重点」**` still pairs.
   return (unit >= 0x3000 && unit <= 0x303F) || (unit >= 0xFF00 && unit <= 0xFF65) || unit == 0x2014 || unit == 0x2026;
 }
