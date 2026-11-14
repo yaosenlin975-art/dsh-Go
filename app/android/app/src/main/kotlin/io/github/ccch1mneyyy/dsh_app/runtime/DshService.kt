@@ -96,7 +96,7 @@ class DshService : Service() {
                 foreground(notification)
                 running = true
                 acquireWakeLock()
-                acquireWifiLock()
+                acquireWifiLock(controller)
                 registerNetworkCallback(controller)
                 logBackgroundPolicy(controller)
                 controller.startProcess()
@@ -104,7 +104,10 @@ class DshService : Service() {
         }
         // A newer accepted command may still be waiting for onStartCommand, including a no-op stop.
         if (!running && installSink == null) stopSelf(startId)
-        return START_NOT_STICKY
+        // Killed by the system (OEM sweep, low memory): Android brings the service back and the
+        // null intent above restarts the engine instead of leaving the notification forever dark.
+        // A deliberate stop goes through stopSelf, which is not rescheduled.
+        return START_STICKY
     }
 
     override fun onDestroy() {
@@ -185,13 +188,21 @@ class DshService : Service() {
      * Android documents for that, held for as long as the engine runs.
      */
     @Suppress("DEPRECATION")
-    private fun acquireWifiLock() {
+    private fun acquireWifiLock(controller: RuntimeController) {
         if (wifiLock?.isHeld == true) return
         val wm = getSystemService(Context.WIFI_SERVICE) as WifiManager
-        wifiLock = wm.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "dsh-app:runtime").apply {
-            setReferenceCounted(false)
-            acquire()
+        val lock = runCatching {
+            wm.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "dsh-app:runtime").apply {
+                setReferenceCounted(false)
+                acquire()
+            }
         }
+        // Without the lock a screen-off turn still dies on the radio: leave the reason in the log
+        // (the diagnostics pack ships it) instead of dropping it.
+        lock.onFailure {
+            controller.note("[dsh-app] wifi lock unavailable: ${it.message ?: it.javaClass.simpleName}")
+        }
+        wifiLock = lock.getOrNull()
     }
 
     private fun stopForegroundCompat() {

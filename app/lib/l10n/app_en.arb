@@ -4046,6 +4046,7 @@
   "pluginsStayOnline": "Stay online",
   "pluginsKeepEngineNotification": "Keep the “Engine running” notification",
   "pluginsLockInRecents": "Lock {app} in recent apps",
+  "pluginsBackgroundNetworkStep": "Allow “background data / unrestricted data”: in system settings, find {app} and turn on background data (some phones call it “Unrestricted data”)",
   "pluginsPhoneBrands": "Phone brands",
   "pluginsOtherBrands": "Other brands",
   "pluginsConnectedHost": "Connected ({host})",

@@ -148,6 +148,7 @@ class _BackgroundGuidePageState extends ConsumerState<BackgroundGuidePage> {
           children: [
             _Step(index: 1, text: l10n.pluginsKeepEngineNotification),
             _Step(index: 2, text: l10n.pluginsLockInRecents(app)),
+            _Step(index: 3, text: l10n.pluginsBackgroundNetworkStep(app)),
           ],
         ),
         SettingsSection(

@@ -24368,6 +24368,12 @@ abstract class L10n {
   /// **'在最近任务里锁定 {app}'**
   String pluginsLockInRecents(String app);
 
+  /// No description provided for @pluginsBackgroundNetworkStep.
+  ///
+  /// In zh, this message translates to:
+  /// **'允许「后台联网 / 无限制数据」：系统设置里找到 {app}，打开后台联网（部分机型写作「不受流量限制」）'**
+  String pluginsBackgroundNetworkStep(String app);
+
   /// No description provided for @pluginsPhoneBrands.
   ///
   /// In zh, this message translates to:

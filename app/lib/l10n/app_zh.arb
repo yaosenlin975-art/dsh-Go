@@ -7847,6 +7847,14 @@
       }
     }
   },
+  "pluginsBackgroundNetworkStep": "允许「后台联网 / 无限制数据」：系统设置里找到 {app}，打开后台联网（部分机型写作「不受流量限制」）",
+  "@pluginsBackgroundNetworkStep": {
+    "placeholders": {
+      "app": {
+        "type": "String"
+      }
+    }
+  },
   "pluginsPhoneBrands": "各品牌",
   "pluginsOtherBrands": "其他品牌",
   "pluginsConnectedHost": "已连接（{host}）",

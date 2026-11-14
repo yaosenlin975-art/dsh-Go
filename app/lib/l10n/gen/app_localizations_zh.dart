@@ -13255,6 +13255,11 @@ class L10nZh extends L10n {
   }
 
   @override
+  String pluginsBackgroundNetworkStep(String app) {
+    return '允许「后台联网 / 无限制数据」：系统设置里找到 $app，打开后台联网（部分机型写作「不受流量限制」）';
+  }
+
+  @override
   String get pluginsPhoneBrands => '各品牌';
 
   @override

@@ -13923,6 +13923,11 @@ class L10nEn extends L10n {
   }
 
   @override
+  String pluginsBackgroundNetworkStep(String app) {
+    return 'Allow “background data / unrestricted data”: in system settings, find $app and turn on background data (some phones call it “Unrestricted data”)';
+  }
+
+  @override
   String get pluginsPhoneBrands => 'Phone brands';
 
   @override

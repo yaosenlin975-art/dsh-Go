@@ -75,13 +75,14 @@ abstract final class BackgroundNetPolicy {
     return false;
   }
 
-  /// The one-time intro after a finished turn.
+  /// The one-time intro after a finished turn. Battery-optimization exemption does not rule it
+  /// out: the maker's background-network switches are a separate setting, so an exempt phone
+  /// still needs to be told where they are.
   static bool introDue({
     required bool introduced,
     required String? vendor,
-    required bool? exempt,
     required Map<BackgroundNetReason, int> shown,
-  }) => !introduced && strictVendors.contains(vendor) && exempt == false && shown.values.every((n) => n == 0);
+  }) => !introduced && strictVendors.contains(vendor) && shown.values.every((n) => n == 0);
 }
 
 /// The line to show now, or null. The host feeds it app visibility; the person dismisses it.
@@ -96,8 +97,6 @@ class BackgroundNetController extends Notifier<BackgroundNetReason?> {
   bool _visible = true;
   final Set<String> _running = {};
   StreamSubscription<HostEvent>? _events;
-
-  RuntimeBridge get _bridge => ref.read(runtimeBridgeProvider);
 
   @override
   BackgroundNetReason? build() {
@@ -158,8 +157,6 @@ class BackgroundNetController extends Notifier<BackgroundNetReason?> {
     if (since != null) unawaited(_onReturn(since));
   }
 
-  Future<bool?> _exempt() async => _bridge.batteryExempt();
-
   Future<void> _onReturn(DateTime since) async {
     await _loading;
     final now = DateTime.now();
@@ -190,7 +187,6 @@ class BackgroundNetController extends Notifier<BackgroundNetReason?> {
     final due = BackgroundNetPolicy.introDue(
       introduced: _introduced,
       vendor: vendor,
-      exempt: await _exempt(),
       shown: _shown,
     );
     if (!due || !ref.mounted || !_visible) return;

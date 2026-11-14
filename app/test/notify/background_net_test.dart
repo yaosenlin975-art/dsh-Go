@@ -119,18 +119,16 @@ void main() {
       expect(BackgroundNetPolicy.transportFailedIn(events, since, since.add(const Duration(seconds: 10))), isFalse);
     });
 
-    test('intro only on strict makers, not exempt, nothing shown yet', () {
+    test('intro on strict makers, nothing shown yet', () {
       bool due({
         bool introduced = false,
         String? vendor = 'vivo',
-        bool? exempt = false,
         Map<BackgroundNetReason, int> shown = none,
-      }) => BackgroundNetPolicy.introDue(introduced: introduced, vendor: vendor, exempt: exempt, shown: shown);
+      }) => BackgroundNetPolicy.introDue(introduced: introduced, vendor: vendor, shown: shown);
       expect(due(), isTrue);
       expect(due(vendor: 'xiaomi'), isTrue);
       expect(due(vendor: 'samsung'), isFalse);
       expect(due(vendor: null), isFalse);
-      expect(due(exempt: true), isFalse);
       expect(due(introduced: true), isFalse);
       expect(due(shown: {BackgroundNetReason.failures: 1}), isFalse);
     });
@@ -221,6 +219,17 @@ void main() {
       await settle();
       expect(c.read(backgroundNetProvider), isNull);
       expect((await SharedPreferences.getInstance()).getBool('background_net.intro'), isTrue);
+    });
+
+    test('an exempt phone still gets the intro: the switches are a separate setting', () async {
+      bridge.exempt = true;
+      final c = container();
+      await settle();
+      events
+        ..add(const SessionStatusEvent('s1', true))
+        ..add(const SessionStatusEvent('s1', false));
+      await settle();
+      expect(c.read(backgroundNetProvider), BackgroundNetReason.intro);
     });
 
     test('no intro on other makers', () async {
