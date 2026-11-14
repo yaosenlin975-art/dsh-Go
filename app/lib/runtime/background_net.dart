@@ -2,6 +2,7 @@
 // leaves the screen, foreground service or not (vivo until 「允许后台高耗电」 is
 // on). The engine runs as this app, so a turn left running in the background
 // stalls on failed requests and picks up again only when the app comes back.
+// Battery-optimization exemption does not change that, so it does not gate this.
 // This decides when to say so: one quiet line in the chat on the way back,
 // leading to 后台保活 (ui/notify/background_net_host.dart draws it).
 
@@ -39,22 +40,21 @@ enum BackgroundNetReason {
 
 /// The decisions, without timers, storage or the platform (unit-tested).
 abstract final class BackgroundNetPolicy {
-  /// Per reason: the first time and once more, until the app is let run in the background.
+  /// Per reason: the first time and once more.
   static const maxShows = 2;
 
   /// Makers that hold background apps back out of the box.
   static const strictVendors = {'vivo', 'xiaomi', 'huawei', 'honor', 'oppo'};
 
-  /// What a return to the app after [since] calls for. Only while the app is not exempt from
-  /// battery optimization ([exempt] false; null means unknown, so nothing is said).
+  /// What a return to the app after [since] calls for. Being exempt from battery optimization
+  /// does not stop a maker from cutting the app's network in the background, so a real block or
+  /// failure is always news; only the evidence decides.
   static BackgroundNetReason? onReturn({
     required DateTime since,
-    required bool? exempt,
     required Map<BackgroundNetReason, int> shown,
     DateTime? blockedAt,
     bool transportFailed = false,
   }) {
-    if (exempt != false) return null;
     final reason = blockedAt != null && !blockedAt.isBefore(since)
         ? BackgroundNetReason.blocked
         : transportFailed
@@ -158,15 +158,7 @@ class BackgroundNetController extends Notifier<BackgroundNetReason?> {
     if (since != null) unawaited(_onReturn(since));
   }
 
-  Future<bool?> _exempt() async {
-    final exempt = await _bridge.batteryExempt();
-    if (exempt == true && _shown.values.any((n) => n > 0)) {
-      // Let run in the background: a later revoke may bring the line back.
-      _shown.updateAll((_, _) => 0);
-      unawaited(_save());
-    }
-    return exempt;
-  }
+  Future<bool?> _exempt() async => _bridge.batteryExempt();
 
   Future<void> _onReturn(DateTime since) async {
     await _loading;
@@ -174,7 +166,6 @@ class BackgroundNetController extends Notifier<BackgroundNetReason?> {
     final status = ref.read(localRuntimeProvider).status;
     final reason = BackgroundNetPolicy.onReturn(
       since: since,
-      exempt: await _exempt(),
       shown: _shown,
       blockedAt: status.networkBlockedAt,
       transportFailed: _transportFailed(since, now),

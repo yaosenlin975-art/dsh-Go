@@ -73,23 +73,20 @@ void main() {
     final since = DateTime(2026, 10, 25, 10);
     const none = <BackgroundNetReason, int>{};
 
-    test('says something only when not exempt', () {
-      for (final exempt in [true, null]) {
-        expect(BackgroundNetPolicy.onReturn(since: since, exempt: exempt, shown: none, blockedAt: since), isNull);
-      }
+    test('a real block is news; no block and no failure is not', () {
       expect(
-        BackgroundNetPolicy.onReturn(since: since, exempt: false, shown: none, blockedAt: since),
+        BackgroundNetPolicy.onReturn(since: since, shown: none, blockedAt: since),
         BackgroundNetReason.blocked,
       );
+      expect(BackgroundNetPolicy.onReturn(since: since, shown: none), isNull);
     });
 
     test('a block from before the app left is not news; failures count on their own', () {
       final before = since.subtract(const Duration(seconds: 1));
-      expect(BackgroundNetPolicy.onReturn(since: since, exempt: false, shown: none, blockedAt: before), isNull);
+      expect(BackgroundNetPolicy.onReturn(since: since, shown: none, blockedAt: before), isNull);
       expect(
         BackgroundNetPolicy.onReturn(
           since: since,
-          exempt: false,
           shown: none,
           blockedAt: before,
           transportFailed: true,
@@ -100,10 +97,10 @@ void main() {
 
     test('each reason at most twice', () {
       const twice = {BackgroundNetReason.blocked: 2};
-      expect(BackgroundNetPolicy.onReturn(since: since, exempt: false, shown: twice, blockedAt: since), isNull);
+      expect(BackgroundNetPolicy.onReturn(since: since, shown: twice, blockedAt: since), isNull);
       // Another reason still has its own two.
       expect(
-        BackgroundNetPolicy.onReturn(since: since, exempt: false, shown: twice, transportFailed: true),
+        BackgroundNetPolicy.onReturn(since: since, shown: twice, transportFailed: true),
         BackgroundNetReason.failures,
       );
     });
@@ -199,15 +196,14 @@ void main() {
       expect(c.read(backgroundNetProvider), isNull);
     });
 
-    test('exempt: nothing, and the count starts over for a later revoke', () async {
-      SharedPreferences.setMockInitialValues({'background_net.shown.blocked': 2});
+    test('exempt: a real block still says something, the two-shows budget holds', () async {
       bridge.exempt = true;
       final c = container();
       await settle();
-      expect(await leaveBlockedAndReturn(c), isNull);
-      expect((await SharedPreferences.getInstance()).getInt('background_net.shown.blocked'), 0);
-      bridge.exempt = false;
       expect(await leaveBlockedAndReturn(c), BackgroundNetReason.blocked);
+      expect(await leaveBlockedAndReturn(c), BackgroundNetReason.blocked);
+      expect(await leaveBlockedAndReturn(c), isNull);
+      expect((await SharedPreferences.getInstance()).getInt('background_net.shown.blocked'), 2);
     });
 
     test('first finished turn on a strict maker: the intro, once', () async {

@@ -13,6 +13,7 @@ import android.net.ConnectivityManager
 import android.net.LinkProperties
 import android.net.Network
 import android.net.Uri
+import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
@@ -26,6 +27,7 @@ import io.github.ccch1mneyyy.dsh_app.phone.PhoneControl
 class DshService : Service() {
 
     private var wakeLock: PowerManager.WakeLock? = null
+    private var wifiLock: WifiManager.WifiLock? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
     private var networkWatch: NetworkAccess.Watch? = null
     private var installSink: RuntimeController.EventSink? = null
@@ -94,6 +96,7 @@ class DshService : Service() {
                 foreground(notification)
                 running = true
                 acquireWakeLock()
+                acquireWifiLock()
                 registerNetworkCallback(controller)
                 logBackgroundPolicy(controller)
                 controller.startProcess()
@@ -117,6 +120,8 @@ class DshService : Service() {
         networkCallback = null
         wakeLock?.let { if (it.isHeld) it.release() }
         wakeLock = null
+        wifiLock?.let { if (it.isHeld) it.release() }
+        wifiLock = null
         super.onDestroy()
     }
 
@@ -169,6 +174,21 @@ class DshService : Service() {
         if (wakeLock?.isHeld == true) return
         val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
         wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "dsh-app:runtime").apply {
+            setReferenceCounted(false)
+            acquire()
+        }
+    }
+
+    /**
+     * A partial wake lock keeps the CPU up but not the Wi-Fi radio: with the screen off it
+     * drops to power save (or off), and the turn's request in flight dies. This is the lock
+     * Android documents for that, held for as long as the engine runs.
+     */
+    @Suppress("DEPRECATION")
+    private fun acquireWifiLock() {
+        if (wifiLock?.isHeld == true) return
+        val wm = getSystemService(Context.WIFI_SERVICE) as WifiManager
+        wifiLock = wm.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "dsh-app:runtime").apply {
             setReferenceCounted(false)
             acquire()
         }
