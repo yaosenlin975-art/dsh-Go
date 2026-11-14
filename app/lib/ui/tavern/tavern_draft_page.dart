@@ -76,6 +76,11 @@ class _TavernDraftPageState extends ConsumerState<TavernDraftPage> {
   StreamSubscription<TavernAuthoringRunEvent>? _events;
   String _asked = '';
   String _answer = '';
+
+  /// What the run has said so far; [_answer] is rebuilt from it once per
+  /// frame's worth of tokens, not once per token.
+  final _answerBuffer = StringBuffer();
+  Timer? _answerFlush;
   TavernAuthoringRunStatus? _status;
   String? _runError;
 
@@ -93,6 +98,7 @@ class _TavernDraftPageState extends ConsumerState<TavernDraftPage> {
   void dispose() {
     // Leaving does not stop the AI: it finishes and is here next time.
     unawaited(_events?.cancel());
+    _answerFlush?.cancel();
     _input.dispose();
     super.dispose();
   }
@@ -182,6 +188,9 @@ class _TavernDraftPageState extends ConsumerState<TavernDraftPage> {
   }
 
   void _follow(TavernAuthoringRun run, String asked) {
+    _answerFlush?.cancel();
+    _answerFlush = null;
+    _answerBuffer.clear();
     setState(() {
       _run = run;
       _asked = asked;
@@ -192,24 +201,46 @@ class _TavernDraftPageState extends ConsumerState<TavernDraftPage> {
     });
     _events = run.events.listen((event) {
       if (!mounted) return;
-      setState(() {
-        _status = event.status;
-        switch (event.kind) {
-          case TavernAuthoringRunEventKind.snapshot:
-            _answer = event.snapshot?.answer ?? _answer;
-          case TavernAuthoringRunEventKind.text:
-            _answer += event.delta ?? '';
-          case TavernAuthoringRunEventKind.request || TavernAuthoringRunEventKind.terminal:
-            break;
-          case TavernAuthoringRunEventKind.receipt:
-            unawaited(_load());
-        }
-      });
+      switch (event.kind) {
+        case TavernAuthoringRunEventKind.snapshot:
+          // What has been said so far, replayed: it replaces the buffer and
+          // is shown at once.
+          final sofar = event.snapshot?.answer;
+          if (sofar != null) {
+            _answerBuffer
+              ..clear()
+              ..write(sofar);
+          }
+          _showAnswer(status: event.status);
+        case TavernAuthoringRunEventKind.text:
+          _answerBuffer.write(event.delta ?? '');
+          // A token only adds to the reply: the page is rebuilt once per
+          // 32 ms instead of once per token. Anything else the run says about
+          // itself is shown at once.
+          if (event.status == _status) {
+            _answerFlush ??= Timer(const Duration(milliseconds: 32), () {
+              _answerFlush = null;
+              if (mounted) _showAnswer();
+            });
+          } else {
+            _showAnswer(status: event.status);
+          }
+        case TavernAuthoringRunEventKind.request || TavernAuthoringRunEventKind.terminal:
+          if (event.status != _status) _showAnswer(status: event.status);
+        case TavernAuthoringRunEventKind.receipt:
+          unawaited(_load());
+          if (event.status != _status) _showAnswer(status: event.status);
+      }
     });
     unawaited(() async {
       try {
         final done = await run.result;
         if (mounted) {
+          _answerFlush?.cancel();
+          _answerFlush = null;
+          _answerBuffer
+            ..clear()
+            ..write(done.answer);
           setState(() {
             _status = done.status;
             _usage = TavernUsageSummary.fromJson(done.usage);
@@ -225,6 +256,17 @@ class _TavernDraftPageState extends ConsumerState<TavernDraftPage> {
       setState(() => _run = null);
       await _load();
     }());
+  }
+
+  /// Shows what the run has said so far, and [status] with it, now; a pending
+  /// frame is dropped because this repaint already carries the text.
+  void _showAnswer({TavernAuthoringRunStatus? status}) {
+    _answerFlush?.cancel();
+    _answerFlush = null;
+    setState(() {
+      _answer = _answerBuffer.toString();
+      if (status != null) _status = status;
+    });
   }
 
   // Apply, save as, catch up ------------------------------------------------

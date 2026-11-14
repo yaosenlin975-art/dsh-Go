@@ -346,7 +346,8 @@ void main() {
     expect(tavern.asked!.draftRevision, 4);
 
     tavern.run.say('改好了开场白。');
-    await tester.pump();
+    // What the AI says is published once per 32 ms, not once per token.
+    await tester.pump(const Duration(milliseconds: 40));
     expect(find.text('改好了开场白。'), findsOneWidget);
 
     tavern.run.done.complete(

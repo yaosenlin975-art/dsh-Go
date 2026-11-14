@@ -191,6 +191,11 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
   http.Client? _lightClient;
   String _lightTurn = '';
   String _lightText = '';
+
+  /// The reply as it arrives; [_lightText] is rebuilt from it once per frame's
+  /// worth of tokens, not once per token.
+  final _lightBuffer = StringBuffer();
+  Timer? _lightFlush;
   String _lightAsked = '';
   int _lightTurns = 0;
 
@@ -392,6 +397,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     // Leaving: drop the light request without touching the page any more.
     _lightClient?.close();
     unawaited(_lightReply?.cancel().catchError((Object _) {}));
+    _lightFlush?.cancel();
     _chat?.close();
     _bubbleTimer?.cancel();
     _settleTimer?.cancel();
@@ -2141,6 +2147,9 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     // Nothing said before this page counts as news.
     _baselineSet = true;
     final turn = _lightTurn = 'light-${++_lightTurns}';
+    _lightFlush?.cancel();
+    _lightFlush = null;
+    _lightBuffer.clear();
     _lightText = '';
     _lightAsked = text;
     final client = _lightClient = ref.read(companionLightClientProvider)();
@@ -2154,8 +2163,15 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
         ).listen(
           (delta) {
             if (!mounted || turn != _lightTurn) return;
-            _lightText += delta;
-            _onReply(turn, _lightText, running: true);
+            _lightBuffer.write(delta);
+            // Each token would otherwise copy and re-parse the whole reply:
+            // show what has arrived at most once per 32 ms instead.
+            _lightFlush ??= Timer(const Duration(milliseconds: 32), () {
+              _lightFlush = null;
+              if (!mounted || turn != _lightTurn) return;
+              _lightText = _lightBuffer.toString();
+              _onReply(turn, _lightText, running: true);
+            });
           },
           onError: (Object error) => _endLight(turn, error: error),
           onDone: () => _endLight(turn),
@@ -2172,6 +2188,10 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     _lightTurn = '';
     _lightClient?.close();
     _lightClient = null;
+    // Whatever arrived since the last frame is hers too.
+    _lightFlush?.cancel();
+    _lightFlush = null;
+    _lightText = _lightBuffer.toString();
     final history = _lightHistory;
     final answered = _lightText.trim().isNotEmpty;
     final asked = _lightContext;
